@@ -1,45 +1,148 @@
-Overview
-========
+# Currency Exchange Rate ETL Pipeline
 
-Welcome to Astronomer! This project was generated after you ran 'astro dev init' using the Astronomer CLI. This readme describes the contents of the project, as well as how to run Apache Airflow on your local machine.
+An automated, daily ETL (Extract, Transform, Load) data pipeline built with **Apache Airflow** (orchestrated via **Astro CLI**), integrating live currency exchange rates from the **Frankfurter API** into **MongoDB**, with administration through **Mongo Express**.
 
-Project Contents
-================
+---
 
-Your Astro project contains the following files and folders:
+## 📌 Project Architecture
 
-- dags: This folder contains the Python files for your Airflow Dags. By default, this directory includes one example Dag:
-    - `example_astronauts`: This Dag shows a simple ETL pipeline example that queries the list of astronauts currently in space from the Open Notify API and prints a statement for each astronaut. The Dag uses the TaskFlow API to define tasks in Python, and dynamic task mapping to dynamically print a statement for each astronaut. For more on how this Dag works, see our [Getting started tutorial](https://www.astronomer.io/docs/learn/get-started-with-airflow).
-- Dockerfile: This file contains a versioned Astro Runtime Docker image that provides a differentiated Airflow experience. If you want to execute other commands or overrides at runtime, specify them here.
-- include: This folder contains any additional files that you want to include as part of your project. It is empty by default.
-- packages.txt: Install OS-level packages needed for your project by adding them to this file. It is empty by default.
-- requirements.txt: Install Python packages needed for your project by adding them to this file. It is empty by default.
-- plugins: Add custom or community plugins for your project to this file. It is empty by default.
-- airflow_settings.yaml: Use this local-only file to specify Airflow Connections, Variables, and Pools instead of entering them in the Airflow UI as you develop Dags in this project.
+```mermaid
+flowchart LR
+    A[Frankfurter API<br/>api.frankfurter.dev] -->|HTTP GET /v2/rates| B[Task 1: extract_exchange_rates]
+    B -->|Named XCom:<br/>raw_exchange_rates| C[Task 2: transform_exchange_rates]
+    C -->|Named XCom:<br/>transformed_exchange_rates| D[Task 3: load_exchange_rates]
+    D -->|MongoHook Upsert| E[(MongoDB: currency_db<br/>Collection: exchange_rates)]
+    F[Mongo Express UI<br/>http://localhost:8081] -.->|Inspect Records| E
+```
 
-Deploy Your Project Locally
-===========================
+### Data Flow Overview:
+1. **Extract**: Fetches latest daily exchange rates for EUR against USD, GBP, and JPY from the public Frankfurter API.
+2. **Named XCom (Extract $\rightarrow$ Transform)**: Passes the raw API JSON array under the explicit key `raw_exchange_rates`.
+3. **Transform**: Cleans, re-keys, and enriches each record with ISO-8601 UTC timestamps and attribution metadata.
+4. **Named XCom (Transform $\rightarrow$ Load)**: Passes the cleaned document list under the key `transformed_exchange_rates`.
+5. **Load**: Connects to MongoDB and performs an idempotent **upsert** (`replace_one(..., upsert=True)`) based on `(base_currency, target_currency, rate_date)` to avoid duplicate entries on re-runs.
 
-Start Airflow on your local machine by running 'astro dev start'.
+---
 
-This command will spin up five Docker containers on your machine, each for a different Airflow component:
+## 🛠️ Tech Stack & Key Components
 
-- Postgres: Airflow's Metadata Database
-- Scheduler: The Airflow component responsible for monitoring and triggering tasks
-- Dag Processor: The Airflow component responsible for parsing Dags
-- API Server: The Airflow component responsible for serving the Airflow UI and API
-- Triggerer: The Airflow component responsible for triggering deferred tasks
+| Technology | Role |
+| :--- | :--- |
+| **Apache Airflow (v3 / Astro Runtime)** | Workflow orchestration, scheduling, and task dependency management |
+| **Astro CLI** | Local container management and Airflow environment lifecycle |
+| **Frankfurter API** | Source public API for European Central Bank exchange rates |
+| **MongoDB (v7.0)** | Primary NoSQL document database storing transformed rates |
+| **Mongo Express (v1.0.2)** | Web-based visual administration interface for MongoDB |
+| **Docker & Docker Compose** | Multi-container networking and persistent volume storage |
 
-When all five containers are ready the command will open the browser to the Airflow UI at http://localhost:8080/. You should also be able to access your Postgres Database at 'localhost:5432/postgres' with username 'postgres' and password 'postgres'.
+---
 
-Note: If you already have either of the above ports allocated, you can either [stop your existing Docker containers or change the port](https://www.astronomer.io/docs/astro/cli/troubleshoot-locally#ports-are-not-available-for-my-local-airflow-webserver).
+## 🐳 Docker Configuration (Networking & Persistent Storage)
 
-Deploy Your Project to Astronomer
-=================================
+Configured via `docker-compose.override.yml`:
 
-If you have an Astronomer account, pushing code to a Deployment on Astronomer is simple. For deploying instructions, refer to Astronomer documentation: https://www.astronomer.io/docs/astro/deploy-code/
+- **Docker Networking**:
+  All containers (`scheduler`, `api-server`, `mongo`, `mongo-express`) share the internal `airflow` Docker network, allowing services to communicate via container names (`mongo:27017`).
+- **Persistent Storage**:
+  - `mongo_data` $\rightarrow$ mounted to `/data/db` on MongoDB to preserve database records across container restarts.
+  - `mongo_express_data` $\rightarrow$ mounted to `/data` on Mongo Express for configuration state.
 
-Contact
-=======
+---
 
-The Astronomer CLI is maintained with love by the Astronomer team. To report a bug or suggest a change, reach out to our support.
+## 📂 Project Structure
+
+```text
+airflow-currency-etl/
+├── dags/
+│   └── currency_exchange_etl.py     # Main Airflow DAG (Extract, Transform, Load)
+├── airflow_settings.yaml            # Pre-configured connections (Frankfurter HTTP, MongoDB)
+├── docker-compose.override.yml      # Service definitions for MongoDB & Mongo Express
+├── Dockerfile                       # Astro Runtime base image
+├── requirements.txt                 # Airflow provider packages (mongo, http)
+└── README.md                        # Project documentation
+```
+
+---
+
+## 📋 Data Schema
+
+Transformed records stored in `currency_db.exchange_rates`:
+
+```json
+{
+  "_id": "6af4abb55ed90685f1c1e267",
+  "base_currency": "EUR",
+  "target_currency": "USD",
+  "exchange_rate": 1.1187,
+  "rate_date": "2026-11-11",
+  "source": "Frankfurter API",
+  "retrieved_at": "2026-11-11T17:54:23"
+}
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running)
+- [Astro CLI](https://www.astronomer.io/docs/astro/cli/install-cli/)
+
+### 2. Start the Pipeline
+Clone this repository and run from the project root:
+
+```bash
+astro dev start
+```
+
+This spins up:
+- Airflow Core (API Server, Scheduler, Triggerer, DAG Processor, Postgres)
+- MongoDB service on port `27017`
+- Mongo Express on port `8081`
+
+### 3. Access Web Interfaces
+
+| Service | URL | Credentials |
+| :--- | :--- | :--- |
+| **Airflow UI** | `http://localhost:8080` (or mapped port from `astro dev ps`) | Default: `admin` / `admin` |
+| **Mongo Express** | `http://localhost:8081` | Basic Auth: `admin` / `admin123` |
+| **MongoDB** | `localhost:27017` | `admin` / `admin123` |
+
+### 4. Running the DAG
+1. In the Airflow UI, find `currency_exchange_etl`.
+2. Unpause the toggle switch to enable scheduled daily runs, or click the **Trigger DAG** button (▶) to run immediately.
+
+---
+
+## 🔍 Verification & Inspection
+
+### Airflow Named XComs
+In Airflow 3 UI:
+1. Open the left sidebar and click **Browse** (🧭) $\rightarrow$ **XComs** (or navigate to `/xcoms`).
+2. Verify both named keys:
+   - `raw_exchange_rates` (pushed by `extract_exchange_rates`)
+   - `transformed_exchange_rates` (pushed by `transform_exchange_rates`)
+
+### Mongo Express UI
+1. Visit `http://localhost:8081` and authenticate with `admin` / `admin123`.
+2. Click on **`currency_db`** $\rightarrow$ **`exchange_rates`**.
+3. View the stored JSON documents for EUR exchange rates against USD, GBP, and JPY.
+
+### Direct MongoDB Query (via Terminal)
+```bash
+docker exec -it mongo mongosh -u admin -p admin123 --authenticationDatabase admin currency_db --eval "db.exchange_rates.find().pretty()"
+```
+
+---
+
+## 🛑 Stopping the Environment
+
+To stop running containers:
+```bash
+astro dev stop
+```
+
+To clean up all containers and volumes:
+```bash
+astro dev kill
+```
