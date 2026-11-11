@@ -4,7 +4,7 @@ An automated, daily ETL (Extract, Transform, Load) data pipeline built with **Ap
 
 ---
 
-## 📌 Project Architecture
+##  Project Architecture
 
 ```mermaid
 flowchart LR
@@ -24,7 +24,7 @@ flowchart LR
 
 ---
 
-## 🛠️ Tech Stack & Key Components
+##  Tech Stack & Key Components
 
 | Technology | Role |
 | :--- | :--- |
@@ -37,7 +37,7 @@ flowchart LR
 
 ---
 
-## 🐳 Docker Configuration (Networking & Persistent Storage)
+##  Docker Configuration (Networking & Persistent Storage)
 
 Configured via `docker-compose.override.yml`:
 
@@ -49,7 +49,7 @@ Configured via `docker-compose.override.yml`:
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```text
 airflow-currency-etl/
@@ -64,7 +64,7 @@ airflow-currency-etl/
 
 ---
 
-## 📋 Data Schema
+##  Data Schema
 
 Transformed records stored in `currency_db.exchange_rates`:
 
@@ -82,7 +82,7 @@ Transformed records stored in `currency_db.exchange_rates`:
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### 1. Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running)
@@ -114,7 +114,7 @@ This spins up:
 
 ---
 
-## 🔍 Verification & Inspection
+##  Verification & Inspection
 
 ### Airflow Named XComs
 In Airflow 3 UI:
@@ -135,7 +135,7 @@ docker exec -it mongo mongosh -u admin -p admin123 --authenticationDatabase admi
 
 ---
 
-## 🛑 Stopping the Environment
+##  Stopping the Environment
 
 To stop running containers:
 ```bash
